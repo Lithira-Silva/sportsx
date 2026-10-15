@@ -26,16 +26,16 @@ export default function Home() {
             <Link
               key={label}
               to={to}
-              className={`group flex items-center gap-4 p-5 transition hover:bg-white/[0.03] sm:p-6 ${
+              className={`group flex flex-col items-center gap-2.5 p-4 text-center transition hover:bg-white/[0.03] sm:flex-row sm:gap-4 sm:p-6 sm:text-left ${
                 i % 2 ? '' : 'border-r border-line'
               } ${i < 2 ? 'border-b border-line lg:border-b-0' : ''} ${i === 1 ? 'lg:border-r' : ''}`}
             >
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand transition group-hover:bg-brand group-hover:text-white">
                 <Icon size={20} />
               </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-extrabold uppercase tracking-wide text-white">{label}</span>
-                <span className="block truncate text-xs text-zinc-400">{text}</span>
+              <span className="min-w-0 max-w-full">
+                <span className="block text-xs font-extrabold uppercase tracking-wide text-white sm:truncate sm:text-sm">{label}</span>
+                <span className="block text-[11px] text-zinc-400 sm:truncate sm:text-xs">{text}</span>
               </span>
             </Link>
           ))}

@@ -22,7 +22,7 @@ export default function Hero() {
   return (
     <section
       id="home"
-      className="relative isolate flex min-h-[640px] items-center overflow-hidden border-b border-line pt-[76px] sm:h-[88vh]"
+      className="relative isolate flex min-h-[640px] items-center overflow-hidden border-b border-line pb-36 pt-[108px] sm:h-[88vh] sm:pb-0 sm:pt-[76px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       aria-roledescription="carousel"
@@ -61,17 +61,17 @@ export default function Hero() {
           >
             {slide.text}
           </p>
-          <div className="animate-fade-up mt-10 flex flex-wrap gap-4" style={{ animationDelay: '240ms' }}>
+          <div className="animate-fade-up mt-10 flex flex-wrap gap-3 sm:gap-4" style={{ animationDelay: '240ms' }}>
             <Link
               to="/book"
-              className="group inline-flex items-center gap-2 rounded-md bg-brand px-7 py-4 font-extrabold uppercase tracking-wide text-white shadow-xl shadow-brand/30 transition hover:-translate-y-0.5 hover:bg-brand-600"
+              className="group inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-brand px-6 py-4 sm:flex-none sm:px-7 font-extrabold uppercase tracking-wide text-white shadow-xl shadow-brand/30 transition hover:-translate-y-0.5 hover:bg-brand-600"
             >
               Book your pitch now
               <ChevronRight size={20} className="transition group-hover:translate-x-1" />
             </Link>
             <Link
               to="/pricing"
-              className="inline-flex items-center rounded-md border border-white/20 px-7 py-4 font-bold uppercase tracking-wide text-white backdrop-blur transition hover:border-white/50 hover:bg-white/5"
+              className="inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-white/20 px-6 py-4 sm:flex-none sm:px-7 font-bold uppercase tracking-wide text-white backdrop-blur transition hover:border-white/50 hover:bg-white/5"
             >
               View pricing
             </Link>
@@ -80,7 +80,7 @@ export default function Hero() {
       </div>
 
       {/* Controls */}
-      <div className="absolute inset-x-0 bottom-20 flex items-center justify-center gap-6">
+      <div className="absolute inset-x-0 bottom-[4.5rem] flex items-center justify-center gap-6 sm:bottom-20">
         <button
           onClick={() => go(index - 1)}
           aria-label="Previous slide"

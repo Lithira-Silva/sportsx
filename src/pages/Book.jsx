@@ -76,6 +76,7 @@ const trackBox = (track) => {
 }
 const trackPitch = (track) => (LANES.includes(track) ? 'B' : track)
 const laneName = (l) => `Lane ${l.slice(1)}`
+const shortTime = (t) => fmtTime(t).replace(':00', '').replace(/^0/, '').replace(' ', '')
 
 /* ---------- Pitch layout ---------- */
 
@@ -198,13 +199,13 @@ function Block({ track, start, end, tone, label }) {
   const narrow = LANES.includes(track)
   return (
     <div
-      className={`pointer-events-none absolute overflow-hidden rounded-md border-l-[3px] px-2 py-1 ${TONES[tone]}`}
+      className={`pointer-events-none absolute overflow-hidden rounded-md border-l-[3px] ${narrow ? 'px-0.5 sm:px-1.5' : 'px-1.5 sm:px-2'} py-1 ${TONES[tone]}`}
       style={{ top: ((start - OPEN) / STEP) * ROW + 2, height: h - 4, left: `calc(${trackBox(track).left} + 3px)`, width: `calc(${trackBox(track).width} - 6px)` }}
     >
-      <p className="truncate text-[11px] font-extrabold uppercase leading-tight">{narrow ? laneName(track).replace('Lane ', 'L') : label}</p>
+      <p className={`truncate font-extrabold uppercase leading-tight ${narrow ? 'text-center text-[9px] sm:text-left sm:text-[11px]' : 'text-[11px]'}`}>{narrow ? laneName(track).replace('Lane ', 'L') : label}</p>
       {h > 40 && (
-        <p className="truncate text-[10px] font-semibold opacity-80">
-          {fmtTime(start).replace(':00', '')} – {fmtTime(end).replace(':00', '')}
+        <p className={`truncate text-[10px] font-semibold opacity-80 ${narrow ? 'hidden sm:block' : ''}`}>
+          {shortTime(start)}–{shortTime(end)}
         </p>
       )}
     </div>
@@ -276,15 +277,15 @@ function Schedule({ date, setDate, bookings, selection, clash, laneMode, onPick 
         <span className="ml-auto hidden text-zinc-500 md:block">Click an empty slot to move your selection there</span>
       </div>
 
-      <div className="p-4 sm:p-6">
+      <div className="p-2.5 sm:p-6">
         <div ref={scrollRef} className="max-h-[620px] overflow-auto rounded-xl border border-line bg-ink">
-          <div className="min-w-[520px]">
+          <div className="sm:min-w-[520px]">
             {/* header */}
-            <div className="sticky top-0 z-20 grid grid-cols-[64px_repeat(3,1fr)] border-b border-line bg-[#111114]/95 backdrop-blur">
+            <div className="sticky top-0 z-20 grid grid-cols-[46px_repeat(3,minmax(0,1fr))] sm:grid-cols-[64px_repeat(3,minmax(0,1fr))] border-b border-line bg-[#111114]/95 backdrop-blur">
               <div />
               {PITCHES.map((p) => (
                 <div key={p.id} className="border-l border-line px-2 py-3 text-center">
-                  <p className="text-sm font-extrabold uppercase tracking-wide text-white">{p.name}</p>
+                  <p className="text-xs font-extrabold uppercase tracking-wide text-white sm:text-sm">{p.name}</p>
                   {p.splittable ? (
                     <div className="mt-1 grid grid-cols-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                       {LANES.map((l) => (
@@ -298,13 +299,13 @@ function Schedule({ date, setDate, bookings, selection, clash, laneMode, onPick 
               ))}
             </div>
 
-            <div className="relative grid grid-cols-[64px_repeat(3,1fr)]" style={{ height: rows * ROW }}>
+            <div className="relative grid grid-cols-[46px_repeat(3,minmax(0,1fr))] sm:grid-cols-[64px_repeat(3,minmax(0,1fr))]" style={{ height: rows * ROW }}>
               {/* time labels */}
               <div className="relative">
                 {hours.map((t) => (
                   <span
                     key={t}
-                    className="absolute right-3 text-[11px] font-semibold tabular-nums text-zinc-500"
+                    className="absolute right-1.5 text-[10px] font-semibold tabular-nums sm:right-3 sm:text-[11px] text-zinc-500"
                     style={{ top: ((t - OPEN) / STEP) * ROW + 4 }}
                   >
                     {fmtHourShort(t)}
@@ -364,7 +365,7 @@ function Schedule({ date, setDate, bookings, selection, clash, laneMode, onPick 
               {/* current time line */}
               {isToday && now > OPEN && now < CLOSE && (
                 <div
-                  className="pointer-events-none absolute left-[64px] right-0 z-10 border-t-2 border-brand"
+                  className="pointer-events-none absolute left-[46px] right-0 z-10 sm:left-[64px] border-t-2 border-brand"
                   style={{ top: ((now - OPEN) / STEP) * ROW }}
                 >
                   <span className="absolute -left-1.5 -top-[7px] h-3 w-3 rounded-full bg-brand" />
@@ -809,7 +810,7 @@ export default function Book() {
                       role="radio"
                       aria-checked={on}
                       onClick={() => chooseType(f.id)}
-                      className={`relative rounded-lg border p-3 text-left transition ${
+                      className={`relative rounded-lg border p-3 pr-8 text-left transition ${
                         on ? 'border-brand bg-brand/10' : 'border-line bg-ink hover:border-zinc-600'
                       }`}
                     >
