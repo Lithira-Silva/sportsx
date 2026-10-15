@@ -15,6 +15,9 @@ import {
   Plus,
   ShieldCheck,
   ShoppingCart,
+  Sun,
+  Sunrise,
+  Moon,
   X,
 } from 'lucide-react'
 import { Container, PageHero, btn } from '../components/ui'
@@ -484,26 +487,160 @@ function Section({ step, title, extra, children }) {
   )
 }
 
-function TimeSelect({ id, label, value, options, onChange }) {
+const PERIODS = [
+  { id: 'morning', label: 'Morning', icon: Sunrise, from: 8 * 60, to: 12 * 60 },
+  { id: 'afternoon', label: 'Afternoon', icon: Sun, from: 12 * 60, to: 17 * 60 },
+  { id: 'evening', label: 'Evening', icon: Moon, from: 17 * 60, to: 24 * 60 },
+]
+const periodOf = (t) => (PERIODS.find((p) => t >= p.from && t < p.to) ?? PERIODS[2]).id
+const fmtDuration = (m) => `${Math.floor(m / 60) ? `${Math.floor(m / 60)} hr` : ''}${m % 60 ? ` ${m % 60} min` : ''}`.trim()
+const splitTime = (t) => {
+  const [hm, ap] = fmtTime(t).split(' ')
+  return [hm.replace(/^0/, ''), ap]
+}
+
+// Start-time slot grid + duration control, replacing two plain dropdowns.
+function TimePicker({ start, end, onChange, slotState }) {
+  const dur = end - start
+  const [period, setPeriod] = useState(() => periodOf(start))
+
+  // Follow the selection when it changes from the schedule
+  useEffect(() => setPeriod(periodOf(start)), [start])
+
+  const active = PERIODS.find((p) => p.id === period)
+  const slots = []
+  for (let t = active.from; t < active.to; t += STEP) slots.push(t)
+
+  const pickStart = (t) => onChange(t, Math.min(t + Math.max(dur, 60), CLOSE))
+  const setDur = (d) => onChange(start, start + Math.max(60, Math.min(d, CLOSE - start)))
+
+  const freeIn = (p) => {
+    let n = 0
+    for (let t = p.from; t < p.to; t += STEP) if (!slotState(t)) n++
+    return n
+  }
+
+  const [sH, sA] = splitTime(start)
+  const [eH, eA] = splitTime(end)
+
   return (
-    <div className="min-w-0 flex-1">
-      <label htmlFor={id} className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-        {label}
-      </label>
-      <div className="relative">
-        <select
-          id={id}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full appearance-none rounded-lg border border-line bg-ink py-3 pl-3.5 pr-8 text-sm font-bold text-white outline-none transition hover:border-zinc-600 focus:border-brand"
-        >
-          {options.map((t) => (
-            <option key={t} value={t} className="bg-panel">
-              {fmtTime(t)}
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+    <div className="space-y-4">
+      {/* Selected range */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center rounded-xl border border-line bg-ink px-4 py-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Start</p>
+          <p className="font-display text-2xl font-bold text-white">
+            {sH} <span className="text-sm text-zinc-400">{sA}</span>
+          </p>
+        </div>
+        <span className="rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-bold text-brand">{fmtDuration(dur)}</span>
+        <div className="text-right">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">End</p>
+          <p className="font-display text-2xl font-bold text-white">
+            {eH} <span className="text-sm text-zinc-400">{eA}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Period tabs */}
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-ink p-1" role="tablist" aria-label="Time of day">
+        {PERIODS.map((p) => {
+          const on = p.id === period
+          const free = freeIn(p)
+          return (
+            <button
+              key={p.id}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setPeriod(p.id)}
+              className={`flex flex-col items-center rounded-md py-2 transition ${
+                on ? 'bg-panel-2 text-white shadow ring-1 ring-line' : 'text-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-xs font-bold">
+                <p.icon size={13} className={on ? 'text-brand' : ''} />
+                {p.label}
+              </span>
+              <span className={`text-[10px] font-semibold ${free ? 'text-zinc-500' : 'text-zinc-700'}`}>
+                {free ? `${free} open` : 'Full'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Start slots */}
+      <div>
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Pick a start time</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          {slots.map((t) => {
+            const state = slotState(t)
+            const isStart = t === start
+            const inRange = t > start && t < end
+            const [hm, ap] = splitTime(t)
+            return (
+              <button
+                key={t}
+                disabled={!!state}
+                onClick={() => pickStart(t)}
+                aria-pressed={isStart}
+                title={state === 'booked' ? 'Already booked' : state === 'past' ? 'Time has passed' : `Start at ${fmtTime(t)}`}
+                className={`rounded-lg border py-2 text-center text-sm font-bold tabular-nums transition ${
+                  isStart
+                    ? 'border-brand bg-brand text-white shadow-md shadow-brand/30'
+                    : inRange
+                      ? 'border-brand/30 bg-brand/15 text-white'
+                      : state === 'booked'
+                        ? 'cursor-not-allowed border-transparent bg-zinc-900 text-zinc-700 line-through'
+                        : state === 'past'
+                          ? 'cursor-not-allowed border-transparent text-zinc-700'
+                          : 'border-line bg-ink text-zinc-200 hover:border-brand/60 hover:text-white'
+                }`}
+              >
+                {hm}
+                <span className="ml-0.5 text-[9px] font-semibold opacity-60">{ap}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Duration */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Duration</p>
+        <div className="flex items-center rounded-lg border border-line bg-ink">
+          <button
+            onClick={() => setDur(dur - STEP)}
+            disabled={dur <= 60}
+            aria-label="Shorter"
+            className="grid h-9 w-9 place-items-center text-zinc-400 transition hover:text-white disabled:opacity-30"
+          >
+            <Minus size={15} />
+          </button>
+          <span className="min-w-20 text-center text-sm font-bold text-white">{fmtDuration(dur)}</span>
+          <button
+            onClick={() => setDur(dur + STEP)}
+            disabled={end >= CLOSE}
+            aria-label="Longer"
+            className="grid h-9 w-9 place-items-center text-zinc-400 transition hover:text-white disabled:opacity-30"
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {DURATIONS.map((d) => (
+          <button
+            key={d}
+            onClick={() => setDur(d)}
+            disabled={start + d > CLOSE}
+            className={`rounded-md border py-1.5 text-xs font-bold transition disabled:opacity-30 ${
+              dur === d ? 'border-brand/60 bg-brand/15 text-white' : 'border-line text-zinc-400 hover:border-zinc-600 hover:text-white'
+            }`}
+          >
+            {d / 60} hr
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -542,6 +679,8 @@ export default function Book() {
   const conflicts = end > start ? findConflicts(bookings, tracks, range) : []
   const freeTracks = end > start ? ['A', 'B', 'C', ...LANES].filter((t) => findConflicts(bookings, [t], range).length === 0) : []
   const isPast = date === todayISO() && start < nowMinutes()
+  const slotState = (t) =>
+    date === todayISO() && t < nowMinutes() ? 'past' : findConflicts(bookings, tracks, { start: t, end: t + STEP }).length ? 'booked' : null
 
   let error = null
   if (end <= start) error = 'End time must be after the start time.'
@@ -657,34 +796,7 @@ export default function Book() {
             </Section>
 
             <Section step="2" title="Time">
-              <div className="flex items-end gap-2">
-                <TimeSelect
-                  id="start"
-                  label="Start"
-                  value={start}
-                  options={TIMES.slice(0, -1)}
-                  onChange={(v) => set({ start: v, end: Math.min(v + Math.max(end - start, 60), CLOSE) })}
-                />
-                <ArrowRight size={16} className="mb-3.5 shrink-0 text-zinc-600" />
-                <TimeSelect id="end" label="End" value={end} options={TIMES.slice(1)} onChange={(v) => set({ end: v })} />
-              </div>
-              <div className="mt-3 grid grid-cols-4 gap-1.5">
-                {DURATIONS.map((d) => {
-                  const on = end - start === d
-                  return (
-                    <button
-                      key={d}
-                      onClick={() => set({ end: Math.min(start + d, CLOSE) })}
-                      disabled={start + d > CLOSE}
-                      className={`rounded-md border py-1.5 text-xs font-bold transition disabled:opacity-30 ${
-                        on ? 'border-brand/60 bg-brand/15 text-white' : 'border-line text-zinc-400 hover:border-zinc-600 hover:text-white'
-                      }`}
-                    >
-                      {d / 60} hr
-                    </button>
-                  )
-                })}
-              </div>
+              <TimePicker start={start} end={end} onChange={(s, e) => set({ start: s, end: e })} slotState={slotState} />
             </Section>
 
             <Section step="3" title="Facility">
