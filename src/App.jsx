@@ -56,8 +56,8 @@ export default function App() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-        <Route path="/login" element={<Auth mode="login" />} />
-        <Route path="/signup" element={<Auth mode="signup" />} />
+        <Route path="/login" element={<Auth key="login" mode="login" />} />
+        <Route path="/signup" element={<Auth key="signup" mode="signup" />} />
       </Routes>
       <Toast />
     </>
