@@ -1,4 +1,5 @@
 import { ChevronRight, Crown, Grid3x3, ShoppingBag, Target } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { OFFERS } from '../data/site'
 import { Reveal, SectionTitle } from './ui'
 
@@ -24,13 +25,13 @@ export default function Offers() {
                 </span>
                 <h3 className="mt-8 text-2xl font-extrabold uppercase tracking-tight text-white">{o.title}</h3>
                 <p className="mt-3 leading-relaxed text-zinc-400">{o.text}</p>
-                <a
-                  href={o.href}
+                <Link
+                  to={o.to}
                   className="mt-8 inline-flex items-center gap-1.5 text-sm font-extrabold uppercase tracking-[0.15em] text-brand"
                 >
                   Explore
                   <ChevronRight size={16} className="transition group-hover:translate-x-1" />
-                </a>
+                </Link>
               </Reveal>
             )
           })}

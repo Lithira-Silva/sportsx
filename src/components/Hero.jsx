@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { SLIDES } from '../data/site'
 
 const INTERVAL = 6000
@@ -61,25 +62,25 @@ export default function Hero() {
             {slide.text}
           </p>
           <div className="animate-fade-up mt-10 flex flex-wrap gap-4" style={{ animationDelay: '240ms' }}>
-            <a
-              href="#book"
+            <Link
+              to="/book"
               className="group inline-flex items-center gap-2 rounded-md bg-brand px-7 py-4 font-extrabold uppercase tracking-wide text-white shadow-xl shadow-brand/30 transition hover:-translate-y-0.5 hover:bg-brand-600"
             >
               Book your pitch now
               <ChevronRight size={20} className="transition group-hover:translate-x-1" />
-            </a>
-            <a
-              href="#pricing"
+            </Link>
+            <Link
+              to="/pricing"
               className="inline-flex items-center rounded-md border border-white/20 px-7 py-4 font-bold uppercase tracking-wide text-white backdrop-blur transition hover:border-white/50 hover:bg-white/5"
             >
               View pricing
-            </a>
+            </Link>
           </div>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="absolute inset-x-0 bottom-10 flex items-center justify-center gap-6">
+      <div className="absolute inset-x-0 bottom-20 flex items-center justify-center gap-6">
         <button
           onClick={() => go(index - 1)}
           aria-label="Previous slide"

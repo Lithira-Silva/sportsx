@@ -1,6 +1,7 @@
 import { Activity, ChevronRight, Crown, Grid3x3, ShieldCheck, Target } from 'lucide-react'
 import { BRAND } from '../data/site'
 import { Reveal } from './ui'
+import { Link } from 'react-router-dom'
 
 const PERKS = [
   { icon: Target, title: 'Simple math', sub: '1 coin equals 1 full hour' },
@@ -51,7 +52,7 @@ function MemberCard() {
   )
 }
 
-export default function Membership({ onJoin }) {
+export default function Membership({ cta = { label: 'Join the elite', to: '/signup' } }) {
   return (
     <section id="membership" className="py-24 sm:py-28">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -89,13 +90,13 @@ export default function Membership({ onJoin }) {
 
               <div className="my-10 h-px bg-line" />
 
-              <button
-                onClick={onJoin}
+              <Link
+                to={cta.to}
                 className="group inline-flex items-center gap-3 rounded-xl bg-white px-9 py-5 text-sm font-black uppercase tracking-[0.2em] text-black shadow-xl shadow-white/5 transition hover:-translate-y-0.5"
               >
-                Join the elite
+                {cta.label}
                 <ChevronRight size={18} className="transition group-hover:translate-x-1" />
-              </button>
+              </Link>
             </div>
 
             <MemberCard />

@@ -1,13 +1,7 @@
-import { Mail, MapPin, Phone } from 'lucide-react'
-import { BRAND } from '../data/site'
+import { Link } from 'react-router-dom'
+import { Clock, Mail, MapPin, Phone } from 'lucide-react'
+import { BRAND, NAV } from '../data/site'
 import { Logo } from './ui'
-
-const LINKS = [
-  { label: 'Book a pitch', href: '#book' },
-  { label: 'Tournaments', href: '#tournaments' },
-  { label: 'Membership', href: '#membership' },
-  { label: 'Pricing & FAQs', href: '#pricing' },
-]
 
 export default function Footer() {
   return (
@@ -23,19 +17,25 @@ export default function Footer() {
             <li className="flex items-center gap-2"><Phone size={15} className="text-brand" />{BRAND.phone}</li>
             <li className="flex items-center gap-2"><Mail size={15} className="text-brand" />{BRAND.email}</li>
             <li className="flex items-center gap-2"><MapPin size={15} className="text-brand" />{BRAND.address}</li>
+            <li className="flex items-center gap-2"><Clock size={15} className="text-brand" />{BRAND.hours}</li>
           </ul>
         </div>
 
         <div>
           <h4 className="text-sm font-black uppercase tracking-[0.15em] text-white">Quick links</h4>
           <ul className="mt-6 space-y-4">
-            {LINKS.map((l) => (
-              <li key={l.label}>
-                <a href={l.href} className="font-bold uppercase text-zinc-300 transition hover:text-brand">
+            {NAV.map((l) => (
+              <li key={l.to}>
+                <Link to={l.to} className="font-bold uppercase text-zinc-300 transition hover:text-brand">
                   {l.label}
-                </a>
+                </Link>
               </li>
             ))}
+            <li>
+              <Link to="/pricing#faq" className="font-bold uppercase text-zinc-300 transition hover:text-brand">
+                FAQs
+              </Link>
+            </li>
           </ul>
         </div>
 
