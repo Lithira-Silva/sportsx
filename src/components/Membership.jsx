@@ -55,7 +55,7 @@ function MemberCard() {
 export default function Membership({ cta = { label: 'Join the elite', to: '/signup' } }) {
   return (
     <section id="membership" className="py-24 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1800px] px-4 sm:px-6 lg:px-10">
         <Reveal className="relative overflow-hidden rounded-[2rem] border border-brand/30 bg-panel px-6 py-14 sm:px-12 lg:px-16 lg:py-20">
           <div className="pointer-events-none absolute -right-40 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-brand/10 blur-3xl" />
           <div className="relative grid items-center gap-16 lg:grid-cols-2">

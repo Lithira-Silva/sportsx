@@ -113,7 +113,7 @@ export const FACILITY_CARDS = [
   {
     icon: 'trophy',
     title: 'Elite Performance Pitches',
-    sub: 'Pitch A & Pitch B full',
+    sub: 'Pitch A, B & C full',
     rateLabel: 'Rate / hour',
     price: RATES.full,
     featured: true,
@@ -168,7 +168,7 @@ export const FAQS = [
   },
   {
     q: 'What is the difference between a full pitch and a lane?',
-    a: 'A full pitch is the whole netted area for team practice or matches. Pitch B can also be split into 3 individual lanes for focused nets. While Pitch B is booked in full, its lanes are locked, and vice versa.',
+    a: 'A full pitch is the whole netted area for team practice or matches. We have 3 full pitches (A, B and C). Pitch B can also be split into 3 individual lanes for focused nets. While Pitch B is booked in full its lanes are unavailable, and vice versa.',
   },
   {
     q: 'Do I need to bring my own gear?',

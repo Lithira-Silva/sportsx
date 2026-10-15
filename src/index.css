@@ -75,3 +75,29 @@ body {
   .animate-marquee, .animate-kenburns, .animate-fade-up { animation: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* Themed scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: #2e2e35;
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand);
+}
+::-webkit-scrollbar-corner {
+  background: var(--color-ink);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2e2e35 var(--color-ink);
+  }
+}

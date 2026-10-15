@@ -81,7 +81,7 @@ export default function Navbar() {
         scrolled || pathname !== '/' ? 'border-line bg-ink/85 backdrop-blur-xl' : 'border-transparent bg-ink/50 backdrop-blur-md'
       }`}
     >
-      <nav className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8" aria-label="Main">
+      <nav className="mx-auto flex h-[76px] max-w-[1800px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-10" aria-label="Main">
         <Logo />
 
         <ul className="hidden items-center gap-9 lg:flex">

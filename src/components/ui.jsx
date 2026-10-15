@@ -31,7 +31,7 @@ export function Reveal({ as: Tag = 'div', className = '', children, ...rest }) {
 }
 
 export function Container({ className = '', children }) {
-  return <div className={`mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 ${className}`}>{children}</div>
+  return <div className={`mx-auto w-full max-w-[1800px] px-4 sm:px-6 lg:px-10 ${className}`}>{children}</div>
 }
 
 export function Badge({ icon: Icon, children, className = '' }) {

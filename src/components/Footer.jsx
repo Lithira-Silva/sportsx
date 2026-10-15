@@ -6,7 +6,7 @@ import { Logo } from './ui'
 export default function Footer() {
   return (
     <footer className="border-t border-line bg-[#08080a] pt-20">
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 md:grid-cols-2 lg:grid-cols-3 lg:px-8">
+      <div className="mx-auto grid max-w-[1800px] gap-12 px-4 sm:px-6 md:grid-cols-2 lg:grid-cols-3 lg:px-10">
         <div>
           <Logo small />
           <p className="mt-6 max-w-sm leading-relaxed text-zinc-400">
@@ -53,7 +53,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="mx-auto mt-16 flex max-w-7xl flex-col items-center justify-between gap-4 border-t border-line px-4 py-8 text-xs font-bold uppercase tracking-[0.15em] text-zinc-500 sm:flex-row sm:px-6 lg:px-8">
+      <div className="mx-auto mt-16 flex max-w-[1800px] flex-col items-center justify-between gap-4 border-t border-line px-4 py-8 text-xs font-bold uppercase tracking-[0.15em] text-zinc-500 sm:flex-row sm:px-6 lg:px-10">
         <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
         <div className="flex gap-6 normal-case tracking-wider">
           <a href="#" className="hover:text-white">Privacy Policy</a>

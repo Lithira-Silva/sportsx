@@ -44,7 +44,7 @@ export default function Hero() {
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-transparent to-ink/40" />
 
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1800px] px-4 sm:px-6 lg:px-10">
         <div key={index} className="max-w-2xl">
           <span className="animate-fade-up inline-block rounded-md border border-brand/40 bg-black/40 px-3.5 py-1.5 text-xs font-extrabold uppercase tracking-[0.15em] text-brand backdrop-blur">
             {slide.badge}

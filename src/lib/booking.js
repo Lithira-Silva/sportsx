@@ -5,19 +5,20 @@ export const OPEN = 8 * 60
 export const CLOSE = 24 * 60
 export const STEP = 30
 
-export const COLUMNS = [
-  { id: 'A', label: 'Pitch A (Full)' },
-  { id: 'B', label: 'Pitch B (Full)' },
-  { id: 'L1', label: 'Lane 1' },
-  { id: 'L2', label: 'Lane 2' },
-  { id: 'L3', label: 'Lane 3' },
-]
+// Pitch B can be booked in full or split into 3 lanes.
 export const LANES = ['L1', 'L2', 'L3']
 
+export const PITCHES = [
+  { id: 'A', name: 'Pitch A', sub: 'Full pitch' },
+  { id: 'B', name: 'Pitch B', sub: 'Full or 3 lanes', splittable: true },
+  { id: 'C', name: 'Pitch C', sub: 'Full pitch' },
+]
+
 export const FACILITY_TYPES = [
-  { id: 'A', label: 'Pitch A (Full)', short: 'Pitch A' },
-  { id: 'B', label: 'Pitch B (Full)', short: 'Pitch B' },
-  { id: 'lanes', label: 'Pitch B (Lanes)', short: 'Pitch B lanes' },
+  { id: 'A', label: 'Pitch A', hint: 'Full pitch', rate: RATES.full },
+  { id: 'B', label: 'Pitch B', hint: 'Full pitch', rate: RATES.full },
+  { id: 'C', label: 'Pitch C', hint: 'Full pitch', rate: RATES.full },
+  { id: 'lanes', label: 'Pitch B lanes', hint: 'Per lane', rate: RATES.lane },
 ]
 
 export const TIMES = Array.from({ length: (CLOSE - OPEN) / STEP + 1 }, (_, i) => OPEN + i * STEP)
@@ -30,10 +31,22 @@ export function fmtTime(min) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
+export function fmtHourShort(min) {
+  const h24 = Math.floor(min / 60) % 24
+  const h = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h} ${h24 < 12 ? 'AM' : 'PM'}`
+}
+
 export const toISODate = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export const todayISO = () => toISODate(new Date())
+
+export const shiftDate = (iso, days) => {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  return toISODate(d)
+}
 
 export const fmtDate = (iso, opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('en', opts)
@@ -50,48 +63,38 @@ function hash(str) {
 export function seedBookings(date) {
   const out = []
   const r = (k, n) => hash(`${date}:${k}`) % n
-  // Pitch A: evening blocks
-  let t = 16 * 60 + r('a0', 4) * 30
-  for (let i = 0; i < 3 && t < CLOSE; i++) {
-    const len = (2 + r(`a${i}`, 2)) * 60
-    out.push({ id: `s-A-${i}`, facility: 'A', date, start: t, end: Math.min(t + len, CLOSE) })
-    t += len + r(`ag${i}`, 3) * 30
+  const evening = (id, from) => {
+    let t = from + r(`${id}0`, 4) * 30
+    for (let i = 0; i < 3 && t < CLOSE; i++) {
+      const len = (1 + r(`${id}${i}`, 3)) * 60
+      out.push({ id: `s-${id}-${i}`, facility: id, date, start: t, end: Math.min(t + len, CLOSE) })
+      t += len + (1 + r(`${id}g${i}`, 3)) * 30
+    }
   }
-  // Pitch B full: one or two blocks
-  t = 18 * 60 + r('b0', 3) * 30
-  out.push({ id: 's-B-0', facility: 'B', date, start: t, end: t + 90 })
-  if (r('b1', 2)) out.push({ id: 's-B-1', facility: 'B', date, start: 22 * 60, end: CLOSE })
-  // Lanes: morning/afternoon sessions
+  evening('A', 16 * 60)
+  evening('C', 17 * 60)
+  const b = 19 * 60 + r('b0', 3) * 30
+  out.push({ id: 's-B-0', facility: 'B', date, start: b, end: b + 90 })
   LANES.forEach((lane, i) => {
-    const s = 9 * 60 + r(`l${i}`, 10) * 30
+    const s = 9 * 60 + r(`l${i}`, 12) * 30
     out.push({ id: `s-${lane}`, facility: lane, date, start: s, end: s + 60 + r(`ll${i}`, 2) * 60 })
   })
   return out
 }
 
-// Which columns a selection occupies.
-export function selectionColumns(type, lanes) {
-  if (type === 'lanes') return lanes
-  return [type]
-}
+// Which tracks a selection occupies.
+export const selectionTracks = (type, lanes) => (type === 'lanes' ? lanes : [type])
 
-// Returns conflicting bookings for a requested set of columns + range.
-export function findConflicts(bookings, columns, range) {
+// Bookings that clash with a requested set of tracks + range.
+export function findConflicts(bookings, tracks, range) {
   return bookings.filter((b) => {
     if (!overlaps(b, range)) return false
-    if (columns.includes(b.facility)) return true
+    if (tracks.includes(b.facility)) return true
     // Pitch B full and its lanes are mutually exclusive
-    if (columns.includes('B') && LANES.includes(b.facility)) return true
-    if (b.facility === 'B' && columns.some((c) => LANES.includes(c))) return true
+    if (tracks.includes('B') && LANES.includes(b.facility)) return true
+    if (b.facility === 'B' && tracks.some((c) => LANES.includes(c))) return true
     return false
   })
-}
-
-// Locked (orange) windows for a column caused by the other side of the B/lanes split.
-export function lockedBlocks(bookings, column) {
-  if (column === 'B') return bookings.filter((b) => LANES.includes(b.facility))
-  if (LANES.includes(column)) return bookings.filter((b) => b.facility === 'B')
-  return []
 }
 
 export function facilityCost(type, lanes, hours) {

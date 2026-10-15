@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  LayoutGrid,
   Loader2,
   Minus,
   Plus,
@@ -19,280 +22,352 @@ import { useApp } from '../context/AppContext'
 import { ADDONS, RATES } from '../data/site'
 import {
   CLOSE,
-  COLUMNS,
   FACILITY_TYPES,
   LANES,
   OPEN,
+  PITCHES,
   STEP,
   TIMES,
   facilityCost,
   findConflicts,
   fmtDate,
+  fmtHourShort,
   fmtTime,
-  lockedBlocks,
   seedBookings,
-  selectionColumns,
-  toISODate,
+  selectionTracks,
+  shiftDate,
   todayISO,
 } from '../lib/booking'
 
-const ROW = 34 // px per 30 minutes
+const ROW = 28 // px per 30 minutes
 const DRAFT_KEY = 'sx.draft'
 const MAX_DAYS = 30
+const DURATIONS = [60, 90, 120, 180]
 
-const shiftDate = (iso, days) => {
-  const d = new Date(`${iso}T00:00:00`)
-  d.setDate(d.getDate() + days)
-  return toISODate(d)
-}
 const nowMinutes = () => {
   const d = new Date()
   return d.getHours() * 60 + d.getMinutes()
 }
-const nextOpenSlot = () => Math.max(OPEN, Math.ceil((nowMinutes() + 1) / STEP) * STEP)
 
 function defaultDraft() {
-  const start = nextOpenSlot()
-  const date = start + 60 > CLOSE ? shiftDate(todayISO(), 1) : todayISO()
-  const s = date === todayISO() ? start : 18 * 60
-  return { date, start: s, end: Math.min(s + 120, CLOSE), type: 'A', lanes: ['L1'], addons: {} }
+  const next = Math.max(OPEN, Math.ceil((nowMinutes() + 1) / STEP) * STEP)
+  const date = next + 60 > CLOSE ? shiftDate(todayISO(), 1) : todayISO()
+  const start = date === todayISO() ? next : 18 * 60
+  return { date, start, end: Math.min(start + 120, CLOSE), type: 'A', lanes: ['L1'], addons: {} }
 }
 
 function loadDraft() {
   try {
     const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY))
-    if (d && d.date >= todayISO()) return d
+    if (d && d.date >= todayISO() && PITCHES.some((p) => p.id === d.type || d.type === 'lanes')) return d
   } catch {
     /* ignore */
   }
   return defaultDraft()
 }
 
-function mergeIntervals(list) {
-  const sorted = [...list].sort((a, b) => a.start - b.start)
-  const out = []
-  for (const b of sorted) {
-    const last = out[out.length - 1]
-    if (last && b.start <= last.end) last.end = Math.max(last.end, b.end)
-    else out.push({ ...b })
-  }
-  return out
+// Horizontal position of a track inside its pitch column (lanes split Pitch B in thirds).
+const trackBox = (track) => {
+  const i = LANES.indexOf(track)
+  return i === -1 ? { left: '0%', width: '100%' } : { left: `${(i * 100) / 3}%`, width: `${100 / 3}%` }
 }
+const trackPitch = (track) => (LANES.includes(track) ? 'B' : track)
+const laneName = (l) => `Lane ${l.slice(1)}`
 
 /* ---------- Pitch layout ---------- */
 
-function PitchCard({ label, sub, active, onClick, children }) {
+function Turf({ children }) {
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={`group relative flex aspect-[4/5] flex-col items-center justify-center overflow-hidden rounded-2xl border-2 transition sm:aspect-[5/6] ${
-        active ? 'border-brand bg-brand/[0.08]' : 'border-line bg-panel-2 hover:border-zinc-600'
-      }`}
-    >
-      {/* crease markings */}
-      <span className="pointer-events-none absolute inset-x-[30%] top-[12%] h-px bg-white/10" />
-      <span className="pointer-events-none absolute inset-x-[30%] bottom-[12%] h-px bg-white/10" />
-      <span className="pointer-events-none absolute inset-y-[12%] left-1/2 w-[18%] -translate-x-1/2 rounded bg-white/[0.03]" />
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#13241a_0%,#0c1510_70%)]">
+      {/* mowing stripes */}
+      <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(255,255,255,0.025)_0_28px,transparent_28px_56px)]" />
       {children}
-      <span className={`relative font-display text-4xl font-bold uppercase sm:text-5xl ${active ? 'text-white' : 'text-zinc-500'}`}>
-        {label}
-      </span>
-      <span className="relative mt-3 rounded-md border border-line bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-zinc-400">
-        {sub}
-      </span>
-    </button>
+    </div>
   )
 }
 
-function PitchLayout({ type, lanes, onType, onToggleLane }) {
-  const lanesMode = type === 'lanes'
+function PitchStrip() {
   return (
-    <div className="rounded-2xl border border-line bg-panel p-5 sm:p-8">
-      <div className="mb-6 flex items-center justify-between border-b border-line pb-5">
-        <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-white">Pitch layout</h2>
-        <span className="text-xs font-semibold text-zinc-500">Tap a pitch or lane to select</span>
+    <div className="absolute left-1/2 top-[14%] h-[54%] w-[22%] -translate-x-1/2 rounded-sm bg-[#3a3122]/70">
+      <span className="absolute inset-x-[-30%] top-[10%] h-px bg-white/40" />
+      <span className="absolute inset-x-[-30%] bottom-[10%] h-px bg-white/40" />
+      <span className="absolute left-1/2 top-[4%] h-[6%] w-[30%] -translate-x-1/2 border-x border-white/50" />
+      <span className="absolute bottom-[4%] left-1/2 h-[6%] w-[30%] -translate-x-1/2 border-x border-white/50" />
+    </div>
+  )
+}
+
+function PitchLayout({ type, lanes, freeTracks, onType, onToggleLane }) {
+  return (
+    <div className="rounded-2xl border border-line bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+        <h2 className="flex items-center gap-3 font-display text-xl font-bold uppercase tracking-wide text-white">
+          <LayoutGrid size={18} className="text-brand" /> Pitch layout
+        </h2>
+        <span className="text-xs font-medium text-zinc-500">Tap a pitch to select · Pitch B splits into 3 lanes</span>
       </div>
-      <div className="grid grid-cols-2 gap-4 sm:gap-6">
-        <PitchCard label="Pitch A" sub="Full pitch" active={type === 'A'} onClick={() => onType('A')} />
-        {lanesMode ? (
-          <div className="grid aspect-[4/5] grid-cols-3 gap-2 rounded-2xl border-2 border-brand/50 p-2 sm:aspect-[5/6]">
-            {LANES.map((l, i) => {
-              const on = lanes.includes(l)
-              return (
-                <button
-                  key={l}
-                  onClick={() => onToggleLane(l)}
-                  aria-pressed={on}
-                  className={`flex flex-col items-center justify-center rounded-xl border transition ${
-                    on ? 'border-brand bg-brand/15 text-white' : 'border-line bg-panel-2 text-zinc-500 hover:border-zinc-600'
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Lane</span>
-                  <span className="font-display text-3xl font-bold">{i + 1}</span>
-                  {on && <Check size={16} className="mt-1 text-brand" />}
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <PitchCard label="Pitch B" sub="Full pitch" active={type === 'B'} onClick={() => onType('B')} />
-        )}
+
+      <div className="grid grid-cols-3 gap-2.5 p-3 sm:gap-4 sm:p-6">
+        {PITCHES.map((p) => {
+          const lanesMode = p.id === 'B' && type === 'lanes'
+          const active = type === p.id || lanesMode
+          const free = lanesMode ? lanes.every((l) => freeTracks.includes(l)) : freeTracks.includes(p.id)
+          return (
+            <div
+              key={p.id}
+              className={`group relative h-48 overflow-hidden rounded-xl border-2 transition sm:h-72 xl:h-80 ${
+                active ? 'border-brand shadow-xl shadow-brand/15' : 'border-line hover:border-zinc-600'
+              }`}
+            >
+              <button
+                onClick={() => onType(p.id)}
+                aria-pressed={active}
+                aria-label={`Select ${p.name}`}
+                className="absolute inset-0"
+              >
+                <Turf>{!lanesMode && <PitchStrip />}</Turf>
+              </button>
+
+              {lanesMode && (
+                <div className="absolute inset-x-1.5 top-1.5 bottom-16 grid grid-cols-3 gap-1 sm:inset-x-3 sm:top-3 sm:bottom-24 sm:gap-2">
+                  {LANES.map((l, i) => {
+                    const on = lanes.includes(l)
+                    return (
+                      <button
+                        key={l}
+                        onClick={() => onToggleLane(l)}
+                        aria-pressed={on}
+                        className={`flex flex-col items-center justify-center rounded-lg border-2 transition ${
+                          on ? 'border-brand bg-brand/25 text-white' : 'border-white/10 bg-black/30 text-zinc-400 hover:border-white/30'
+                        }`}
+                      >
+                        <span className="hidden text-[10px] font-bold uppercase tracking-widest sm:block">Lane</span>
+                        <span className="font-display text-xl font-bold sm:text-3xl">{i + 1}</span>
+                        <span className={`mt-1 grid h-5 w-5 place-items-center rounded-full ${on ? 'bg-brand' : 'border border-white/20'}`}>
+                          {on && <Check size={12} />}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {active && !lanesMode && (
+                <span className="pointer-events-none absolute right-2 top-2 grid h-6 w-6 sm:right-3 sm:top-3 sm:h-7 sm:w-7 place-items-center rounded-full bg-brand text-white shadow-lg">
+                  <Check size={16} />
+                </span>
+              )}
+
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-start justify-between gap-1.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8 sm:flex-row sm:items-end sm:p-4 sm:pt-10">
+                <div>
+                  <p className={`font-display text-lg font-bold uppercase sm:text-3xl ${active ? 'text-white' : 'text-zinc-300'}`}>{p.name}</p>
+                  <p className="hidden text-[11px] font-bold uppercase tracking-[0.15em] text-zinc-400 sm:block">{p.sub}</p>
+                </div>
+                {active && (
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
+                      free ? 'bg-emerald-500/20 text-emerald-300' : 'bg-brand/25 text-red-300'
+                    }`}
+                  >
+                    {free ? 'Available' : 'Clash'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-/* ---------- Schedule timeline ---------- */
+/* ---------- Schedule ---------- */
 
-function Block({ start, end, tone, title, sub }) {
-  const styles = {
-    booked: 'border-brand/80 bg-brand/15 text-brand',
-    locked: 'border-orange-500/80 bg-orange-500/10 text-orange-400',
-    mine: 'border-emerald-500/80 bg-emerald-500/10 text-emerald-400',
-    select: 'border-dashed border-white/80 bg-white/10 text-white',
-    clash: 'border-dashed border-brand bg-brand/30 text-white',
-  }
+const TONES = {
+  booked: 'border-brand bg-brand/15 text-red-200',
+  mine: 'border-emerald-400 bg-emerald-500/15 text-emerald-200',
+  select: 'border-white bg-white/15 text-white ring-1 ring-inset ring-white/40',
+  clash: 'border-amber-400 bg-amber-500/20 text-amber-100 ring-1 ring-inset ring-amber-400/50',
+}
+
+function Block({ track, start, end, tone, label }) {
+  const h = ((end - start) / STEP) * ROW
+  const narrow = LANES.includes(track)
   return (
     <div
-      className={`pointer-events-none absolute inset-x-1.5 flex flex-col items-center justify-center overflow-hidden rounded-lg border-2 px-1 text-center ${styles[tone]}`}
-      style={{ top: ((start - OPEN) / STEP) * ROW + 3, height: ((end - start) / STEP) * ROW - 6 }}
+      className={`pointer-events-none absolute overflow-hidden rounded-md border-l-[3px] px-2 py-1 ${TONES[tone]}`}
+      style={{ top: ((start - OPEN) / STEP) * ROW + 2, height: h - 4, left: `calc(${trackBox(track).left} + 3px)`, width: `calc(${trackBox(track).width} - 6px)` }}
     >
-      <span className="text-[11px] font-extrabold uppercase leading-tight sm:text-xs">{title}</span>
-      {end - start > STEP && <span className="mt-0.5 text-[10px] font-bold uppercase opacity-80">{sub}</span>}
+      <p className="truncate text-[11px] font-extrabold uppercase leading-tight">{narrow ? laneName(track).replace('Lane ', 'L') : label}</p>
+      {h > 40 && (
+        <p className="truncate text-[10px] font-semibold opacity-80">
+          {fmtTime(start).replace(':00', '')} – {fmtTime(end).replace(':00', '')}
+        </p>
+      )}
     </div>
   )
 }
 
-function Schedule({ date, setDate, bookings, selection, clash, onPick }) {
+function Schedule({ date, setDate, bookings, selection, clash, laneMode, onPick }) {
   const scrollRef = useRef(null)
   const isToday = date === todayISO()
-  const pastEnd = isToday ? Math.min(Math.max(nowMinutes(), OPEN), CLOSE) : OPEN
+  const now = nowMinutes()
   const rows = (CLOSE - OPEN) / STEP
+  const hours = TIMES.filter((t) => t % 60 === 0 && t < CLOSE)
 
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTo({ top: Math.max(0, ((selection.start - OPEN) / STEP) * ROW - ROW * 2), behavior: 'smooth' })
-    // only when date changes
+    if (el) el.scrollTo({ top: Math.max(0, ((selection.start - OPEN) / STEP) * ROW - ROW * 3), behavior: 'smooth' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date])
 
-  const handleClick = (col, e) => {
+  const handleClick = (pitch, e) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const slot = Math.floor((e.clientY - rect.top) / ROW)
-    onPick(col, OPEN + slot * STEP)
+    const minute = OPEN + Math.floor((e.clientY - rect.top) / ROW) * STEP
+    const lane = LANES[Math.min(2, Math.floor(((e.clientX - rect.left) / rect.width) * 3))]
+    onPick(pitch === 'B' && laneMode ? lane : pitch, minute)
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-panel p-5 sm:p-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-line pb-5">
-        <div>
-          <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-white">Live schedule</h2>
-          <p className="mt-1 text-sm text-zinc-500">Click any open cell to start a booking there.</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="rounded-2xl border border-line bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
+        <h2 className="flex items-center gap-3 font-display text-xl font-bold uppercase tracking-wide text-white">
+          <Clock size={18} className="text-brand" /> Live schedule
+        </h2>
+        <div className="flex items-center rounded-lg border border-line bg-ink p-1">
           <button
             onClick={() => setDate(shiftDate(date, -1))}
             disabled={isToday}
             aria-label="Previous day"
-            className="grid h-10 w-10 place-items-center rounded-md border border-line text-zinc-300 transition hover:border-zinc-500 disabled:opacity-30"
+            className="grid h-8 w-8 place-items-center rounded-md text-zinc-300 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
-          <span className="min-w-40 text-center text-sm font-bold text-white">
-            {isToday ? 'Today · ' : ''}
-            {fmtDate(date, { weekday: 'short', day: 'numeric', month: 'short' })}
+          <span className="min-w-36 px-2 text-center text-sm font-bold text-white">
+            {isToday ? 'Today, ' : ''}
+            {fmtDate(date, { weekday: isToday ? undefined : 'short', day: 'numeric', month: 'short' })}
           </span>
           <button
             onClick={() => setDate(shiftDate(date, 1))}
             disabled={date >= shiftDate(todayISO(), MAX_DAYS)}
             aria-label="Next day"
-            className="grid h-10 w-10 place-items-center rounded-md border border-line text-zinc-300 transition hover:border-zinc-500 disabled:opacity-30"
+            className="grid h-8 w-8 place-items-center rounded-md text-zinc-300 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
           </button>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-zinc-400">
-        <span className="flex items-center gap-2"><i className="h-3 w-3 rounded-sm border-2 border-brand bg-brand/20" />Booked</span>
-        <span className="flex items-center gap-2"><i className="h-3 w-3 rounded-sm border-2 border-orange-500 bg-orange-500/20" />Locked (conflict)</span>
-        <span className="flex items-center gap-2"><i className="h-3 w-3 rounded-sm border-2 border-emerald-500 bg-emerald-500/20" />Your booking</span>
-        <span className="flex items-center gap-2"><i className="h-3 w-3 rounded-sm border-2 border-dashed border-white bg-white/20" />Your selection</span>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 pt-4 text-xs font-medium text-zinc-400 sm:px-6">
+        {[
+          ['border-brand bg-brand/20', 'Booked'],
+          ['border-emerald-400 bg-emerald-500/20', 'Your booking'],
+          ['border-white bg-white/20', 'Your selection'],
+          ['border-zinc-600 bg-[repeating-linear-gradient(135deg,#3f3f46_0_2px,transparent_2px_5px)]', 'Past'],
+        ].map(([c, l]) => (
+          <span key={l} className="flex items-center gap-2">
+            <i className={`h-3 w-3 rounded-sm border-l-[3px] ${c}`} />
+            {l}
+          </span>
+        ))}
+        <span className="ml-auto hidden text-zinc-500 md:block">Click an empty slot to move your selection there</span>
       </div>
 
-      <div ref={scrollRef} className="max-h-[560px] overflow-auto rounded-xl border border-line bg-ink/60">
-        <div className="min-w-[680px]">
-          {/* header */}
-          <div className="sticky top-0 z-20 grid grid-cols-[84px_repeat(5,1fr)] border-b border-line bg-[#111114]">
-            <div className="py-4 text-center text-[11px] font-bold uppercase italic tracking-widest text-zinc-500">Time</div>
-            {COLUMNS.map((c) => (
-              <div key={c.id} className="border-l border-line py-4 text-center text-xs font-extrabold uppercase tracking-wide text-white">
-                {c.label}
-              </div>
-            ))}
-          </div>
-
-          <div className="relative grid grid-cols-[84px_repeat(5,1fr)]" style={{ height: rows * ROW }}>
-            {/* time labels */}
-            <div className="relative">
-              {TIMES.slice(0, -1).map((t) => (
-                <span
-                  key={t}
-                  className={`absolute right-3 -translate-y-1/2 text-[11px] font-bold tabular-nums ${t % 60 ? 'text-zinc-600' : 'text-zinc-400'}`}
-                  style={{ top: ((t - OPEN) / STEP) * ROW }}
-                >
-                  {t === OPEN ? '' : fmtTime(t).replace(':00 ', ' ')}
-                </span>
+      <div className="p-4 sm:p-6">
+        <div ref={scrollRef} className="max-h-[620px] overflow-auto rounded-xl border border-line bg-ink">
+          <div className="min-w-[520px]">
+            {/* header */}
+            <div className="sticky top-0 z-20 grid grid-cols-[64px_repeat(3,1fr)] border-b border-line bg-[#111114]/95 backdrop-blur">
+              <div />
+              {PITCHES.map((p) => (
+                <div key={p.id} className="border-l border-line px-2 py-3 text-center">
+                  <p className="text-sm font-extrabold uppercase tracking-wide text-white">{p.name}</p>
+                  {p.splittable ? (
+                    <div className="mt-1 grid grid-cols-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                      {LANES.map((l) => (
+                        <span key={l}>{l}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Full pitch</p>
+                  )}
+                </div>
               ))}
             </div>
 
-            {COLUMNS.map((c) => {
-              const own = bookings.filter((b) => b.facility === c.id)
-              const locked = mergeIntervals(lockedBlocks(bookings, c.id))
-              const selected = selection.columns.includes(c.id)
-              return (
+            <div className="relative grid grid-cols-[64px_repeat(3,1fr)]" style={{ height: rows * ROW }}>
+              {/* time labels */}
+              <div className="relative">
+                {hours.map((t) => (
+                  <span
+                    key={t}
+                    className="absolute right-3 text-[11px] font-semibold tabular-nums text-zinc-500"
+                    style={{ top: ((t - OPEN) / STEP) * ROW + 4 }}
+                  >
+                    {fmtHourShort(t)}
+                  </span>
+                ))}
+              </div>
+
+              {PITCHES.map((p) => {
+                const items = bookings.filter((b) => trackPitch(b.facility) === p.id)
+                const sel = selection.tracks.filter((t) => trackPitch(t) === p.id)
+                return (
+                  <div
+                    key={p.id}
+                    onClick={(e) => handleClick(p.id, e)}
+                    className="relative cursor-pointer border-l border-line transition-colors hover:bg-white/[0.015]"
+                    style={{
+                      backgroundImage: `repeating-linear-gradient(to bottom, rgba(255,255,255,0.07) 0 1px, transparent 1px ${ROW}px, rgba(255,255,255,0.025) ${ROW}px ${ROW + 1}px, transparent ${ROW + 1}px ${ROW * 2}px)`,
+                    }}
+                  >
+                    {p.splittable && (
+                      <>
+                        <span className="pointer-events-none absolute inset-y-0 left-1/3 border-l border-dashed border-white/[0.06]" />
+                        <span className="pointer-events-none absolute inset-y-0 left-2/3 border-l border-dashed border-white/[0.06]" />
+                      </>
+                    )}
+                    {isToday && now > OPEN && (
+                      <div
+                        className="pointer-events-none absolute inset-x-0 top-0 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.035)_0_2px,transparent_2px_8px)]"
+                        style={{ height: Math.min(((now - OPEN) / STEP) * ROW, rows * ROW) }}
+                      />
+                    )}
+                    {items.map((b) => (
+                      <Block
+                        key={b.id}
+                        track={b.facility}
+                        start={b.start}
+                        end={b.end}
+                        tone={b.mine ? 'mine' : 'booked'}
+                        label={b.mine ? 'Your booking' : 'Booked'}
+                      />
+                    ))}
+                    {selection.end > selection.start &&
+                      sel.map((t) => (
+                        <Block
+                          key={`sel-${t}`}
+                          track={t}
+                          start={selection.start}
+                          end={selection.end}
+                          tone={clash ? 'clash' : 'select'}
+                          label={clash ? 'Clash' : 'Selected'}
+                        />
+                      ))}
+                  </div>
+                )
+              })}
+
+              {/* current time line */}
+              {isToday && now > OPEN && now < CLOSE && (
                 <div
-                  key={c.id}
-                  className="relative cursor-pointer border-l border-line transition-colors hover:bg-white/[0.02]"
-                  style={{
-                    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${ROW - 1}px, rgba(255,255,255,0.05) ${ROW - 1}px ${ROW}px)`,
-                  }}
-                  onClick={(e) => handleClick(c.id, e)}
-                  role="button"
-                  aria-label={`${c.label} column, click to select a start time`}
+                  className="pointer-events-none absolute left-[64px] right-0 z-10 border-t-2 border-brand"
+                  style={{ top: ((now - OPEN) / STEP) * ROW }}
                 >
-                  {pastEnd > OPEN && (
-                    <div
-                      className="pointer-events-none absolute inset-x-0 top-0 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.03)_0_6px,transparent_6px_12px)]"
-                      style={{ height: ((pastEnd - OPEN) / STEP) * ROW }}
-                    />
-                  )}
-                  {locked.map((b, i) => (
-                    <Block key={`l${i}`} start={b.start} end={b.end} tone="locked" title="Locked" sub="Conflict" />
-                  ))}
-                  {own.map((b) => (
-                    <Block
-                      key={b.id}
-                      start={b.start}
-                      end={b.end}
-                      tone={b.mine ? 'mine' : 'booked'}
-                      title={b.mine ? 'Your booking' : 'Booked'}
-                      sub={`${fmtTime(b.start)} - ${fmtTime(b.end)}`}
-                    />
-                  ))}
-                  {selected && selection.end > selection.start && (
-                    <Block
-                      start={selection.start}
-                      end={selection.end}
-                      tone={clash ? 'clash' : 'select'}
-                      title={clash ? 'Unavailable' : 'Your selection'}
-                      sub={`${fmtTime(selection.start)} - ${fmtTime(selection.end)}`}
-                    />
-                  )}
+                  <span className="absolute -left-1.5 -top-[7px] h-3 w-3 rounded-full bg-brand" />
                 </div>
-              )
-            })}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -392,6 +467,48 @@ function Checkout({ summary, onClose, onPaid }) {
   )
 }
 
+/* ---------- Parameters panel ---------- */
+
+function Section({ step, title, extra, children }) {
+  return (
+    <div className="border-t border-line px-5 py-5 first:border-t-0 sm:px-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.15em] text-zinc-300">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-brand/15 text-[10px] text-brand">{step}</span>
+          {title}
+        </p>
+        {extra}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function TimeSelect({ id, label, value, options, onChange }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <label htmlFor={id} className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+        {label}
+      </label>
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-full appearance-none rounded-lg border border-line bg-ink py-3 pl-3.5 pr-8 text-sm font-bold text-white outline-none transition hover:border-zinc-600 focus:border-brand"
+        >
+          {options.map((t) => (
+            <option key={t} value={t} className="bg-panel">
+              {fmtTime(t)}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+      </div>
+    </div>
+  )
+}
+
 /* ---------- Page ---------- */
 
 export default function Book() {
@@ -400,6 +517,7 @@ export default function Book() {
   const [draft, setDraft] = useState(loadDraft)
   const [showAddons, setShowAddons] = useState(false)
   const [checkout, setCheckout] = useState(null)
+  const dateInput = useRef(null)
 
   const { date, start, end, type, lanes, addons } = draft
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }))
@@ -412,43 +530,45 @@ export default function Book() {
     }
   }, [draft])
 
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => shiftDate(todayISO(), i)), [])
+
   const bookings = useMemo(
     () => [...seedBookings(date), ...myBookings.filter((b) => b.date === date).map((b) => ({ ...b, mine: true }))],
     [date, myBookings],
   )
 
-  const columns = selectionColumns(type, lanes)
-  const conflicts = end > start ? findConflicts(bookings, columns, { start, end }) : []
+  const tracks = selectionTracks(type, lanes)
+  const range = { start, end }
+  const conflicts = end > start ? findConflicts(bookings, tracks, range) : []
+  const freeTracks = end > start ? ['A', 'B', 'C', ...LANES].filter((t) => findConflicts(bookings, [t], range).length === 0) : []
   const isPast = date === todayISO() && start < nowMinutes()
 
   let error = null
   if (end <= start) error = 'End time must be after the start time.'
   else if (type === 'lanes' && lanes.length === 0) error = 'Select at least one lane.'
   else if (isPast) error = 'That start time has already passed. Pick a later slot.'
-  else if (conflicts.length) error = 'Your selection overlaps an existing booking. Choose another time or facility.'
+  else if (conflicts.length) error = 'This time clashes with an existing booking. Try another time or pitch.'
 
   const hours = Math.max(0, (end - start) / 60)
   const facilityLabel =
-    type === 'lanes'
-      ? `Pitch B · Lane${lanes.length > 1 ? 's' : ''} ${lanes.map((l) => l.slice(1)).join(', ')}`
-      : FACILITY_TYPES.find((f) => f.id === type).label
+    type === 'lanes' ? `Pitch B · ${lanes.map(laneName).join(', ')}` : `${FACILITY_TYPES.find((f) => f.id === type).label} (Full)`
 
-  const lines = [{ label: 'Facility cost', amount: facilityCost(type, lanes, hours) }]
+  const lines = [{ label: `${type === 'lanes' ? `${lanes.length} lane${lanes.length === 1 ? '' : 's'}` : 'Full pitch'} × ${hours} hr`, amount: facilityCost(type, lanes, hours) }]
   ADDONS.forEach((a) => {
     const qty = addons[a.id] || 0
-    if (qty) lines.push({ label: `${a.name}${a.perHour ? '' : ` × ${qty}`}`, amount: a.perHour ? a.price * hours : a.price * qty })
+    if (qty) lines.push({ label: a.perHour ? `${a.name} × ${hours} hr` : `${a.name} × ${qty}`, amount: a.perHour ? a.price * hours : a.price * qty })
   })
   const total = lines.reduce((s, l) => s + l.amount, 0)
+  const addonCount = Object.values(addons).filter(Boolean).length
 
-  const pick = (col, minute) => {
+  const pick = (track, minute) => {
     const s = Math.min(minute, CLOSE - STEP)
     const e = Math.min(s + Math.max(end - start, 60), CLOSE)
-    if (LANES.includes(col)) {
-      const next = type === 'lanes' ? (lanes.includes(col) ? lanes : [...lanes, col].sort()) : [col]
-      set({ type: 'lanes', lanes: next, start: s, end: e })
-    } else set({ type: col, start: s, end: e })
+    if (LANES.includes(track)) set({ type: 'lanes', lanes: type === 'lanes' && lanes.includes(track) ? lanes : [...(type === 'lanes' ? lanes : []), track].sort(), start: s, end: e })
+    else set({ type: track, start: s, end: e })
   }
 
+  const chooseType = (t) => set({ type: t, lanes: t === 'lanes' && lanes.length === 0 ? ['L1'] : lanes })
   const toggleLane = (l) => set({ lanes: lanes.includes(l) ? lanes.filter((x) => x !== l) : [...lanes, l].sort() })
 
   const confirm = () => {
@@ -461,8 +581,6 @@ export default function Book() {
     setCheckout({ facility: facilityLabel, date, start, end, hours, lines, total })
   }
 
-  const field = 'w-full rounded-lg border border-line bg-ink px-4 py-3.5 font-bold text-white outline-none transition focus:border-brand'
-
   return (
     <>
       <PageHero
@@ -470,139 +588,179 @@ export default function Book() {
         badgeIcon={CalendarDays}
         title="Book your"
         accent="Pitch"
-        text="Choose a full pitch or an individual lane, pick your time on the live schedule and confirm in seconds."
+        text="Choose a pitch or individual lanes, pick your time on the live schedule and confirm in seconds."
       />
 
-      <section className="py-12 sm:py-16">
-        <Container className="grid items-start gap-8 lg:grid-cols-[1fr_380px]">
-          <div className="min-w-0 space-y-8">
-            <PitchLayout
-              type={type}
-              lanes={lanes}
-              onType={(t) => set({ type: t })}
-              onToggleLane={toggleLane}
-            />
+      <section className="py-10 sm:py-14">
+        <Container className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0 space-y-6">
+            <PitchLayout type={type} lanes={lanes} freeTracks={freeTracks} onType={(p) => chooseType(p === 'B' && type === 'lanes' ? 'lanes' : p)} onToggleLane={toggleLane} />
             <Schedule
               date={date}
               setDate={(d) => set({ date: d })}
               bookings={bookings}
-              selection={{ start, end, columns }}
+              selection={{ start, end, tracks }}
               clash={conflicts.length > 0}
+              laneMode={type === 'lanes'}
               onPick={pick}
             />
           </div>
 
           {/* Parameters */}
-          <aside className="rounded-2xl border border-line bg-panel p-6 sm:p-7 lg:sticky lg:top-24">
-            <h2 className="border-b border-line pb-5 font-display text-2xl font-bold uppercase tracking-wide text-white">Parameters</h2>
+          <aside className="overflow-hidden rounded-2xl border border-line bg-panel xl:sticky xl:top-24">
+            <div className="flex items-center justify-between bg-gradient-to-r from-brand/15 to-transparent px-5 py-4 sm:px-6">
+              <h2 className="font-display text-xl font-bold uppercase tracking-wide text-white">Booking details</h2>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">{hours ? `${hours} hr` : '—'}</span>
+            </div>
 
-            <label className="mt-6 block text-xs font-bold uppercase tracking-[0.18em] text-zinc-500" htmlFor="date">
-              Date
-            </label>
-            <input
-              id="date"
-              type="date"
-              value={date}
-              min={todayISO()}
-              max={shiftDate(todayISO(), MAX_DAYS)}
-              onChange={(e) => e.target.value && set({ date: e.target.value })}
-              className={`${field} mt-2 [color-scheme:dark]`}
-            />
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              {[
-                ['Start', 'start', TIMES.slice(0, -1)],
-                ['End', 'end', TIMES.slice(1)],
-              ].map(([label, key, opts]) => (
-                <div key={key}>
-                  <label htmlFor={key} className="block text-center text-[11px] font-bold uppercase tracking-widest text-zinc-500">
-                    {label}
-                  </label>
-                  <div className="relative mt-2">
-                    <select
-                      id={key}
-                      value={draft[key]}
-                      onChange={(e) => {
-                        const v = Number(e.target.value)
-                        if (key === 'start') set({ start: v, end: Math.max(end, Math.min(v + 60, CLOSE)) })
-                        else set({ end: v })
-                      }}
-                      className={`${field} appearance-none text-center`}
+            <Section
+              step="1"
+              title="Date"
+              extra={
+                <label className="relative cursor-pointer text-[11px] font-bold uppercase tracking-wider text-brand hover:underline">
+                  More dates
+                  <input
+                    ref={dateInput}
+                    type="date"
+                    value={date}
+                    min={todayISO()}
+                    max={shiftDate(todayISO(), MAX_DAYS)}
+                    onChange={(e) => e.target.value && set({ date: e.target.value })}
+                    onClick={(e) => e.currentTarget.showPicker?.()}
+                    className="absolute inset-0 cursor-pointer opacity-0 [color-scheme:dark]"
+                    aria-label="Pick a date"
+                  />
+                </label>
+              }
+            >
+              <div className="grid grid-cols-7 gap-1.5">
+                {days.map((d, i) => {
+                  const on = d === date
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => set({ date: d })}
+                      aria-pressed={on}
+                      className={`flex flex-col items-center rounded-lg border py-2 transition ${
+                        on ? 'border-brand bg-brand text-white shadow-lg shadow-brand/25' : 'border-line bg-ink text-zinc-400 hover:border-zinc-600 hover:text-white'
+                      }`}
                     >
-                      {opts.map((t) => (
-                        <option key={t} value={t} className="bg-panel">
-                          {fmtTime(t)}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Facility type</p>
-            <div className="mt-2 space-y-2.5" role="radiogroup" aria-label="Facility type">
-              {FACILITY_TYPES.map((f) => (
-                <button
-                  key={f.id}
-                  role="radio"
-                  aria-checked={type === f.id}
-                  onClick={() => set({ type: f.id, lanes: f.id === 'lanes' && lanes.length === 0 ? ['L1'] : lanes })}
-                  className={`flex w-full items-center justify-between rounded-lg border px-4 py-3.5 text-sm font-extrabold uppercase tracking-wider transition ${
-                    type === f.id ? 'border-brand bg-brand/10 text-brand' : 'border-line bg-ink text-zinc-300 hover:border-zinc-600'
-                  }`}
-                >
-                  {f.label}
-                  <span className="text-xs font-semibold normal-case tracking-normal text-zinc-500">
-                    Rs. {(f.id === 'lanes' ? RATES.lane : RATES.full).toLocaleString()}/hr{f.id === 'lanes' ? '/lane' : ''}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {type === 'lanes' && (
-              <div className="mt-3 flex gap-2">
-                {LANES.map((l, i) => (
-                  <button
-                    key={l}
-                    onClick={() => toggleLane(l)}
-                    aria-pressed={lanes.includes(l)}
-                    className={`flex-1 rounded-md border py-2 text-xs font-bold uppercase tracking-wider transition ${
-                      lanes.includes(l) ? 'border-brand bg-brand text-white' : 'border-line text-zinc-400 hover:border-zinc-600'
-                    }`}
-                  >
-                    Lane {i + 1}
-                  </button>
-                ))}
+                      <span className="text-[9px] font-bold uppercase tracking-wider">{i === 0 ? 'Today' : fmtDate(d, { weekday: 'short' })}</span>
+                      <span className="font-display text-lg font-bold leading-tight">{Number(d.slice(8))}</span>
+                    </button>
+                  )
+                })}
               </div>
-            )}
+              {!days.includes(date) && (
+                <p className="mt-2 text-xs font-semibold text-white">Selected: {fmtDate(date)}</p>
+              )}
+            </Section>
 
-            {/* Optional items */}
-            <div className="mt-6 rounded-xl border border-line">
-              <button
-                onClick={() => setShowAddons((s) => !s)}
-                aria-expanded={showAddons}
-                className="flex w-full items-center justify-center gap-3 py-4 text-xs font-black uppercase tracking-wider text-white"
-              >
-                <ShoppingCart size={16} className="text-zinc-400" />
-                {showAddons ? 'Hide optional items' : 'Add optional items'}
-                {Object.values(addons).some(Boolean) && (
-                  <span className="rounded-full bg-brand px-2 py-0.5 text-[10px]">{Object.values(addons).filter(Boolean).length}</span>
-                )}
-              </button>
-              {showAddons && (
-                <ul className="space-y-3 border-t border-line p-4">
+            <Section step="2" title="Time">
+              <div className="flex items-end gap-2">
+                <TimeSelect
+                  id="start"
+                  label="Start"
+                  value={start}
+                  options={TIMES.slice(0, -1)}
+                  onChange={(v) => set({ start: v, end: Math.min(v + Math.max(end - start, 60), CLOSE) })}
+                />
+                <ArrowRight size={16} className="mb-3.5 shrink-0 text-zinc-600" />
+                <TimeSelect id="end" label="End" value={end} options={TIMES.slice(1)} onChange={(v) => set({ end: v })} />
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-1.5">
+                {DURATIONS.map((d) => {
+                  const on = end - start === d
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => set({ end: Math.min(start + d, CLOSE) })}
+                      disabled={start + d > CLOSE}
+                      className={`rounded-md border py-1.5 text-xs font-bold transition disabled:opacity-30 ${
+                        on ? 'border-brand/60 bg-brand/15 text-white' : 'border-line text-zinc-400 hover:border-zinc-600 hover:text-white'
+                      }`}
+                    >
+                      {d / 60} hr
+                    </button>
+                  )
+                })}
+              </div>
+            </Section>
+
+            <Section step="3" title="Facility">
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Facility">
+                {FACILITY_TYPES.map((f) => {
+                  const on = type === f.id
+                  return (
+                    <button
+                      key={f.id}
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => chooseType(f.id)}
+                      className={`relative rounded-lg border p-3 text-left transition ${
+                        on ? 'border-brand bg-brand/10' : 'border-line bg-ink hover:border-zinc-600'
+                      }`}
+                    >
+                      <span className={`block text-sm font-extrabold uppercase ${on ? 'text-white' : 'text-zinc-300'}`}>{f.label}</span>
+                      <span className="block text-[11px] text-zinc-500">
+                        Rs. {f.rate.toLocaleString()} · {f.hint === 'Per lane' ? 'per lane/hr' : 'per hr'}
+                      </span>
+                      <span
+                        className={`absolute right-2.5 top-2.5 grid h-4 w-4 place-items-center rounded-full border ${
+                          on ? 'border-brand bg-brand' : 'border-zinc-600'
+                        }`}
+                      >
+                        {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {type === 'lanes' && (
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {LANES.map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => toggleLane(l)}
+                      aria-pressed={lanes.includes(l)}
+                      className={`rounded-md border py-2 text-xs font-bold uppercase tracking-wider transition ${
+                        lanes.includes(l) ? 'border-brand bg-brand text-white' : 'border-line text-zinc-400 hover:border-zinc-600'
+                      }`}
+                    >
+                      {laneName(l)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            <Section
+              step="4"
+              title="Extras"
+              extra={
+                <button
+                  onClick={() => setShowAddons((s) => !s)}
+                  aria-expanded={showAddons}
+                  className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand"
+                >
+                  <ShoppingCart size={13} />
+                  {addonCount ? `${addonCount} added` : 'Optional'}
+                  <ChevronDown size={14} className={`transition ${showAddons ? 'rotate-180' : ''}`} />
+                </button>
+              }
+            >
+              {showAddons ? (
+                <ul className="divide-y divide-line rounded-lg border border-line bg-ink">
                   {ADDONS.map((a) => {
                     const qty = addons[a.id] || 0
                     const setQty = (q) => set({ addons: { ...addons, [a.id]: Math.max(0, Math.min(a.perHour ? 1 : 20, q)) } })
                     return (
-                      <li key={a.id} className="flex items-center justify-between gap-3">
+                      <li key={a.id} className="flex items-center justify-between gap-3 px-3.5 py-3">
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-semibold text-white">{a.name}</span>
-                          <span className="block text-xs text-zinc-500">
+                          <span className="block text-[11px] text-zinc-500">
                             Rs. {a.price.toLocaleString()}
-                            {a.perHour ? '/hr' : ''} · {a.note}
+                            {a.perHour ? ' / hr' : ' each'}
                           </span>
                         </span>
                         {a.perHour ? (
@@ -616,13 +774,13 @@ export default function Book() {
                             <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${qty ? 'left-[22px]' : 'left-0.5'}`} />
                           </button>
                         ) : (
-                          <span className="flex shrink-0 items-center gap-2">
-                            <button onClick={() => setQty(qty - 1)} aria-label={`Fewer ${a.name}`} className="grid h-7 w-7 place-items-center rounded border border-line text-zinc-300 hover:border-zinc-500">
-                              <Minus size={14} />
+                          <span className="flex shrink-0 items-center rounded-md border border-line">
+                            <button onClick={() => setQty(qty - 1)} aria-label={`Fewer ${a.name}`} className="grid h-7 w-7 place-items-center text-zinc-400 hover:text-white">
+                              <Minus size={13} />
                             </button>
-                            <span className="w-5 text-center text-sm font-bold tabular-nums text-white">{qty}</span>
-                            <button onClick={() => setQty(qty + 1)} aria-label={`More ${a.name}`} className="grid h-7 w-7 place-items-center rounded border border-line text-zinc-300 hover:border-zinc-500">
-                              <Plus size={14} />
+                            <span className="w-6 text-center text-sm font-bold tabular-nums text-white">{qty}</span>
+                            <button onClick={() => setQty(qty + 1)} aria-label={`More ${a.name}`} className="grid h-7 w-7 place-items-center text-zinc-400 hover:text-white">
+                              <Plus size={13} />
                             </button>
                           </span>
                         )}
@@ -630,43 +788,56 @@ export default function Book() {
                     )
                   })}
                 </ul>
+              ) : (
+                <p className="text-xs text-zinc-500">Bowling machine, balls and drinks.</p>
               )}
-            </div>
+            </Section>
 
-            {error && (
-              <p role="alert" className="mt-5 flex items-start gap-2 rounded-lg border border-brand/40 bg-brand/10 p-3 text-sm text-red-300">
-                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-brand" />
-                {error}
+            {/* Summary */}
+            <div className="border-t border-line bg-ink/50 px-5 py-5 sm:px-6">
+              <p className="mb-3 text-sm font-bold text-white">{facilityLabel}</p>
+              <p className="-mt-2 mb-4 text-xs text-zinc-500">
+                {fmtDate(date, { weekday: 'short', day: 'numeric', month: 'short' })} · {fmtTime(start)} – {fmtTime(end)}
               </p>
-            )}
-
-            <div className="mt-6 rounded-xl border border-line bg-ink/60 p-5">
-              {lines.map((l) => (
-                <div key={l.label} className="flex justify-between py-1.5 text-xs font-bold uppercase tracking-wider">
-                  <span className="text-zinc-500">{l.label}</span>
-                  <span className="text-white">Rs. {l.amount.toLocaleString()}</span>
-                </div>
-              ))}
-              <div className="mt-3 flex items-end justify-between border-t border-line pt-4">
-                <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Total cost</span>
+              <dl className="space-y-1.5">
+                {lines.map((l) => (
+                  <div key={l.label} className="flex justify-between gap-4 text-xs">
+                    <dt className="text-zinc-400">{l.label}</dt>
+                    <dd className="font-semibold tabular-nums text-zinc-200">Rs. {l.amount.toLocaleString()}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="mt-4 flex items-end justify-between border-t border-dashed border-line pt-4">
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total</span>
                 <span className="font-display text-3xl font-bold text-white">Rs. {total.toLocaleString()}</span>
               </div>
-              <p className="mt-3 text-[10px] font-bold uppercase leading-relaxed tracking-wider text-zinc-600">
-                Note: all bookings require full payment upfront. Payments are strictly non-refundable.
+              <p className="mt-1 text-right text-[11px] text-zinc-500">
+                Members pay Rs. {RATES.member.toLocaleString()}/hr with Elite coins
               </p>
-            </div>
 
-            <button onClick={confirm} disabled={!!error} className={`${btn.primary} mt-6 w-full text-sm`}>
-              {user ? 'Confirm & proceed to payment' : 'Log in to confirm booking'}
-            </button>
-            {!user && (
-              <p className="mt-3 text-center text-xs text-zinc-500">
-                New here?{' '}
-                <Link to="/signup" state={{ from: '/book' }} className="font-bold text-white hover:text-brand">
-                  Create an account
-                </Link>
+              {error && (
+                <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-medium text-amber-200">
+                  <AlertTriangle size={15} className="mt-px shrink-0 text-amber-400" />
+                  {error}
+                </p>
+              )}
+
+              <button onClick={confirm} disabled={!!error} className={`${btn.primary} mt-5 w-full py-4 text-sm`}>
+                {user ? 'Confirm & proceed to payment' : 'Log in to confirm'}
+                <ArrowRight size={17} />
+              </button>
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-zinc-500">
+                <ShieldCheck size={13} /> Full payment upfront · non-refundable
               </p>
-            )}
+              {!user && (
+                <p className="mt-2 text-center text-xs text-zinc-500">
+                  New here?{' '}
+                  <Link to="/signup" state={{ from: '/book' }} className="font-bold text-white hover:text-brand">
+                    Create an account
+                  </Link>
+                </p>
+              )}
+            </div>
           </aside>
         </Container>
       </section>
@@ -676,7 +847,7 @@ export default function Book() {
           summary={checkout}
           onClose={() => setCheckout(null)}
           onPaid={(ref) => {
-            addBookings(columns.map((c) => ({ id: `${ref}-${c}`, ref, facility: c, date, start, end })))
+            addBookings(tracks.map((t) => ({ id: `${ref}-${t}`, ref, facility: t, date, start, end })))
             set({ addons: {} })
             notify(`Booking ${ref} confirmed`)
           }}
